@@ -1,0 +1,71 @@
+name: Build and publish Docker image
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    name: Build and push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate semantic version tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $TAG"
+            echo "Expected format: vX.Y.Z (for example v1.2.3)"
+            exit 1
+          fi
+
+      - name: Ensure tagged commit is on main
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --no-tags
+
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+            echo "Tag ${GITHUB_REF_NAME} does not point to a commit contained in main."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERID }}
+          password: ${{ secrets.DOCKER_HUB_PAT }}
+
+      - name: Set image version
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            repasscloud/whisper-transcribe:${{ steps.version.outputs.version }}
+            repasscloud/whisper-transcribe:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

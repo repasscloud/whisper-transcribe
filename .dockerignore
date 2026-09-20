@@ -1,0 +1,11 @@
+.git
+*.md
+*.wav
+*.mp3
+transcript/
+__pycache__/
+*.pyc
+*.pyo
+*.pycache
+*.pyd
+*.so
